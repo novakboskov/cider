@@ -118,6 +118,34 @@ This function also removes itself from `post-command-hook'."
   (remove-hook 'post-command-hook #'cider--remove-result-overlay-after-command 'local)
   (add-hook 'post-command-hook #'cider--remove-result-overlay nil 'local))
 
+(defface cider-fringe-good-face
+  '((((class color) (background light))
+     :foreground "lightgreen")
+    (((class color) (background dark))
+     :foreground "darkgreen"))
+  "Face used on the fringe indicator for successful evaluation."
+  :group 'cider-overlays)
+
+(defconst cider--fringe-overlay-good
+  (propertize " " 'display
+              '(left-fringe empty-line cider-fringe-good-face))
+  "The before-string property that adds a green indicator on the fringe.")
+
+(defun cider--make-fringe-overlay (&optional beg end)
+  "Place an eval indicator at the fringe before BEG.
+BEG defaults to `point', and the overlay used extends until END (which
+defaults to the end of the sexp). "
+  (save-excursion
+    (if beg
+        (goto-char beg)
+      (setq beg (point)))
+    (unless end
+      (clojure-forward-logical-sexp 1)
+      (setq end (point)))
+    ;; Create the green-circle overlay.
+    (cider--make-overlay beg end 'cider-fringe-indicator
+                         'before-string cider--fringe-overlay-good)))
+
 (cl-defun cider--make-result-overlay (value &rest props &key where duration (type 'result)
                                             (format (concat " " cider-eval-result-prefix "%s "))
                                             (prepend-face 'cider-result-overlay-face)
@@ -185,10 +213,12 @@ overlay."
           ;; Put the cursor property only once we're done manipulating the
           ;; string, since we want it to be at the first char.
           (put-text-property 0 1 'cursor 0 display-string)
+          ;; Create the result overlay.
           (setq o (apply #'cider--make-overlay
                          beg end type
                          'after-string display-string
                          props))
+          (cider--make-fringe-overlay beg end)
           (pcase duration
             ((pred numberp) (run-at-time duration nil #'cider--delete-overlay o))
             (`command
